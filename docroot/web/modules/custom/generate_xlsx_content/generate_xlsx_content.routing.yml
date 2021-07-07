@@ -1,0 +1,7 @@
+generate_xlsx_content.generate_content:
+  path: '/admin/config/development/generate-xlsx-content'
+  defaults:
+    _form:  '\Drupal\generate_xlsx_content\Form\GenerateXLSXContentForm'
+    _title: 'Generate XLSX Content Form'
+  requirements:
+    _permission: 'access generate xlsx content'

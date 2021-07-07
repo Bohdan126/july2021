@@ -1,0 +1,3 @@
+access generate xlsx content:
+  title: 'Access to generate xlsx content'
+  'restrict access': TRUE

@@ -1,0 +1,6 @@
+system.generate-xlsx-content:
+  title: 'Generate XLSX Content'
+  parent: system.admin_config_development
+  description: 'Form that allow to generate xlsx content.'
+  route_name: generate_xlsx_content.generate_content
+  weight: -16

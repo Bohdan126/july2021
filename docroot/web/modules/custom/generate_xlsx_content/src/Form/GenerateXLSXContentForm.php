@@ -2,13 +2,38 @@
 
 namespace Drupal\generate_xlsx_content\Form;
 
+use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Implements a form to generate xlsx content.
  */
 class GenerateXLSXContentForm extends FormBase {
+
+  /**
+   * The entity type manager.
+   *
+   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
+   */
+  protected $entityTypeManager;
+
+  /**
+   * Create an instance of GenerateXLSXContentForm.
+   */
+  public function __construct(EntityTypeManagerInterface $entityTypeManager) {
+    $this->entityTypeManager = $entityTypeManager;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container) {
+    return new static(
+      $container->get('entity_type.manager')
+    );
+  }
 
   /**
    * {@inheritdoc}
@@ -21,16 +46,23 @@ class GenerateXLSXContentForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
-    $form['candidate_copy'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('Example of content type'),
-    );
-    $form['actions']['#type'] = 'actions';
-    $form['actions']['submit'] = array(
-      '#type' => 'submit',
-      '#value' => $this->t('Generate Archive'),
-      '#button_type' => 'primary',
-    );
+    $content_types = $this->entityTypeManager->getStorage('node_type')->loadMultiple();
+    if (!empty($content_types)) {
+      foreach ($content_types as $content_type) {
+        $form[$content_type->id()] = [
+          '#type' => 'checkbox',
+          '#title' => $content_type->label(),
+        ];
+      }
+
+      $form['actions']['#type'] = 'actions';
+      $form['actions']['submit'] = [
+        '#type' => 'submit',
+        '#value' => $this->t('Generate Archive'),
+        '#button_type' => 'primary',
+      ];
+    }
+
     return $form;
   }
 

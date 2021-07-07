@@ -70,9 +70,13 @@ class GenerateXLSXContentForm extends FormBase {
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
-//    if (strlen($form_state->getValue('candidate_number')) < 10) {
-//      $form_state->setErrorByName('candidate_number', $this->t('Mobile number is too short.'));
-//    }
+    $content_types = $this->entityTypeManager->getStorage('node_type')->loadMultiple();
+    foreach ($content_types as $content_type) {
+      if (!empty($form_state->getValue($content_type->id()))) {
+        return;
+      }
+    }
+    $form_state->setErrorByName('content_type', $this->t('No content types was selected.'));
   }
 
   /**

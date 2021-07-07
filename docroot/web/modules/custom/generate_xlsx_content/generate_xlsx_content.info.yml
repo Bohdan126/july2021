@@ -1,0 +1,5 @@
+name: Generate XLSX Content
+description: Custom module that allow to generate xlsx content.
+package: custom
+type: module
+core_version_requirement: ^8.8.0 || ^9

@@ -2,6 +2,7 @@
 
 namespace Drupal\generate_xlsx_content\Form;
 
+use Drupal\Core\Batch\BatchBuilder;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
@@ -20,10 +21,18 @@ class GenerateXLSXContentForm extends FormBase {
   protected $entityTypeManager;
 
   /**
+   * Batch Builder.
+   *
+   * @var \Drupal\Core\Batch\BatchBuilder
+   */
+  protected $batchBuilder;
+
+  /**
    * Create an instance of GenerateXLSXContentForm.
    */
   public function __construct(EntityTypeManagerInterface $entityTypeManager) {
     $this->entityTypeManager = $entityTypeManager;
+    $this->batchBuilder = new BatchBuilder();
   }
 
   /**
@@ -95,8 +104,93 @@ class GenerateXLSXContentForm extends FormBase {
         $nids = \Drupal::entityQuery('node')
           ->condition('type', $bundles, 'IN')
           ->execute();
+
+        $this->batchBuilder
+          ->setTitle($this->t('Processing'))
+          ->setInitMessage($this->t('Initializing.'))
+          ->setProgressMessage($this->t('Completed @current of @total.'))
+          ->setErrorMessage($this->t('An error has occurred.'));
+
+        $this->batchBuilder->setFile(drupal_get_path('module', 'generate_xlsx_content') . '/src/Form/GenerateXLSXContentForm.php');
+        $this->batchBuilder->addOperation([$this, 'processItems'], [$nids]);
+        $this->batchBuilder->setFinishCallback([$this, 'finished']);
+
+        batch_set($this->batchBuilder->toArray());
       }
     }
+  }
+
+  /**
+   * Processor for batch operations.
+   */
+  public function processItems($items, array &$context) {
+    // Elements per operation.
+    $limit = 50;
+
+    // Set default progress values.
+    if (empty($context['sandbox']['progress'])) {
+      $context['sandbox']['progress'] = 0;
+      $context['sandbox']['max'] = count($items);
+    }
+
+    // Save items to array which will be changed during processing.
+    if (empty($context['sandbox']['items'])) {
+      $context['sandbox']['items'] = $items;
+    }
+
+    $counter = 0;
+    if (!empty($context['sandbox']['items'])) {
+      // Remove already processed items.
+      if ($context['sandbox']['progress'] != 0) {
+        array_splice($context['sandbox']['items'], 0, $limit);
+      }
+
+      foreach ($context['sandbox']['items'] as $item) {
+        if ($counter != $limit) {
+          $this->processItem($item);
+
+          $counter++;
+          $context['sandbox']['progress']++;
+
+          $context['message'] = $this->t('Now processing node :progress of :count', [
+            ':progress' => $context['sandbox']['progress'],
+            ':count' => $context['sandbox']['max'],
+          ]);
+
+          // Increment total processed item values. Will be used in finished
+          // callback.
+          $context['results']['processed'] = $context['sandbox']['progress'];
+        }
+      }
+    }
+
+    // If not finished all tasks, we count percentage of process. 1 = 100%.
+    if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+      $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+    }
+  }
+
+  /**
+   * Process single item.
+   *
+   * @param int|string $item
+   *   An id of Node.
+   */
+  public function processItem($item) {
+    $node = $this->entityTypeManager->getStorage('node')->load($item);
+    $node->save();
+  }
+
+  /**
+   * Finished callback for batch.
+   */
+  public function finished($success, $results, $operations) {
+    $message = $this->t('Number of nodes affected by batch: @count', [
+      '@count' => $results['processed'],
+    ]);
+
+    $this->messenger()
+      ->addStatus($message);
   }
 
 }

@@ -83,10 +83,20 @@ class GenerateXLSXContentForm extends FormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-//    // drupal_set_message($this->t('@can_name ,Your application is being submitted!', array('@can_name' => $form_state->getValue('candidate_name'))));
-//    foreach ($form_state->getValues() as $key => $value) {
-//      drupal_set_message($key . ': ' . $value);
-//    }
+    $content_types = $this->entityTypeManager->getStorage('node_type')->loadMultiple();
+    if (!empty($content_types)) {
+      foreach ($content_types as $content_type) {
+        if (!empty($form_state->getValue($content_type->id()))) {
+          $bundles[] = $content_type->id();
+        }
+      }
+
+      if (!empty($bundles)) {
+        $nids = \Drupal::entityQuery('node')
+          ->condition('type', $bundles, 'IN')
+          ->execute();
+      }
+    }
   }
 
 }

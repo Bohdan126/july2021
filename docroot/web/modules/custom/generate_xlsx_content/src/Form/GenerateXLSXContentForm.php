@@ -4,9 +4,18 @@ namespace Drupal\generate_xlsx_content\Form;
 
 use Drupal\Core\Batch\BatchBuilder;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\File\FileSystemInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Link;
+use Drupal\Core\Url;
+use PhpOffice\PhpSpreadsheet\Calculation\Exception;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
 /**
  * Implements a form to generate xlsx content.
@@ -147,7 +156,8 @@ class GenerateXLSXContentForm extends FormBase {
 
       foreach ($context['sandbox']['items'] as $item) {
         if ($counter != $limit) {
-          $this->processItem($item);
+          $output = $this->vboExportContentXlsx($item);
+          $this->sendToFile($output);
 
           $counter++;
           $context['sandbox']['progress']++;
@@ -191,6 +201,166 @@ class GenerateXLSXContentForm extends FormBase {
 
     $this->messenger()
       ->addStatus($message);
+  }
+
+  /**
+   * Xlsx content builder function.
+   */
+  protected function vboExportContentXlsx($variables) {
+    $a = 1;
+
+    //rename $variables.
+    $node = $this->entityTypeManager->getStorage('node')->load($variables);
+    $headers = [
+      'Node ID',
+      'Link',
+      'Content Type',
+      'Title',
+      'Author',
+      'Created at',
+      'Status',
+      '[Field Name 1]',
+      '[Field Name 2]',
+      '[Field Name N]',
+    ];
+
+
+    $config = $variables['configuration'];
+    $current_user = \Drupal::currentUser();
+
+    // Load PhpSpreadsheet library.
+    if (!_vbo_export_library_exists(Spreadsheet::class)) {
+      \Drupal::logger('vbo_export')->error('PhpSpreadsheet library not installed.');
+      return '';
+    }
+
+    // Create PHPExcel spreadsheet and add rows to it.
+    $spreadsheet = new Spreadsheet();
+    $spreadsheet->removeSheetByIndex(0);
+    $spreadsheet->getProperties()
+      ->setCreated(\Drupal::time()->getRequestTime())
+      ->setCreator($current_user->getDisplayName())
+      ->setTitle('VBO Export - ' . date('d-m-Y H:i', \Drupal::time()->getRequestTime()))
+      ->setLastModifiedBy($current_user->getDisplayName());
+    $worksheet = $spreadsheet->createSheet();
+    $worksheet->setTitle((string) t('Export'));
+
+    // Set header.
+    $col_index = 1;
+    foreach ($headers as $header) {
+      $worksheet->setCellValueExplicitByColumnAndRow($col_index++, 1, trim($header), DataType::TYPE_STRING);
+    }
+
+    $author = $node->getRevisionAuthor();
+
+    $rows[] = [
+      'node_id' => $node->id(),
+      'link' => 'test',
+      'title' => $node->label(),
+      'content_type' => $node->bundle(),
+      'author' => $node->getRevisionAuthor()->name->getString(),
+      'created_at' => $node->getCreatedTime(),
+      'status' => $node->get('status')->getString() ? 'published' : 'unpublished',
+      'field1' => 'test',
+      'field2' => 'test',
+      'field3' => 'test',
+    ];
+    // Set rows.
+    foreach ($rows as $row_index => $row) {
+      $col_index = 1;
+      foreach ($row as $cell) {
+        // Sanitize data.
+        if ($config['strip_tags']) {
+          $cell = strip_tags($cell);
+        }
+        // Rows start from 1 and we need to account for header.
+        $worksheet->setCellValueExplicitByColumnAndRow($col_index++, $row_index + 2, trim($cell), DataType::TYPE_STRING);
+      }
+      //unset($variables['rows'][$row_index]);
+    }
+
+    // Add some additional styling to the worksheet.
+    $spreadsheet->getDefaultStyle()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+    $last_column = $worksheet->getHighestColumn();
+    $last_column_index = Coordinate::columnIndexFromString($last_column);
+
+    // Define the range of the first row.
+    $first_row_range = 'A1:' . $last_column . '1';
+
+    // Set first row in bold.
+    $worksheet->getStyle($first_row_range)->getFont()->setBold(TRUE);
+
+    // Activate an autofilter on the first row.
+    $worksheet->setAutoFilter($first_row_range);
+
+    // Set wrap text and top vertical alignment for the entire worksheet.
+    $full_range = 'A1:' . $last_column . $worksheet->getHighestRow();
+    $worksheet->getStyle($full_range)->getAlignment()
+      ->setWrapText(TRUE)
+      ->setVertical(Alignment::VERTICAL_TOP);
+
+    for ($column = 0; $column <= $last_column_index; $column++) {
+      $worksheet->getColumnDimensionByColumn($column)->setAutoSize(TRUE);
+    }
+
+    // Set a minimum and maximum width for columns.
+    // TODO: move this to module settings.
+    $min_column_width = 15;
+    $max_column_width = 85;
+
+    // Added a try-catch block
+    // due to https://github.com/PHPOffice/PHPExcel/issues/556.
+    try {
+      $worksheet->calculateColumnWidths();
+    }
+    catch (Exception $e) {
+
+    }
+
+    for ($column = 0; $column <= $last_column_index; $column++) {
+      $width = $worksheet->getColumnDimensionByColumn($column)->getWidth();
+      if ($width < $min_column_width) {
+        $worksheet->getColumnDimensionByColumn($column)->setAutoSize(FALSE);
+        $worksheet->getColumnDimensionByColumn($column)->setWidth($min_column_width);
+      }
+      elseif ($width > $max_column_width) {
+        $worksheet->getColumnDimensionByColumn($column)->setAutoSize(FALSE);
+        $worksheet->getColumnDimensionByColumn($column)->setWidth($max_column_width);
+      }
+    }
+
+    $objWriter = new Xlsx($spreadsheet);
+    // Catch the output of the spreadsheet.
+    ob_start();
+    $objWriter->save('php://output');
+    $excelOutput = ob_get_clean();
+    return $excelOutput;
+  }
+
+  /**
+   * Output generated string to file. Message user.
+   *
+   * @param string $output
+   *   The string that will be saved to a file.
+   */
+  protected function sendToFile($output) {
+    if (!empty($output)) {
+      $rand = substr(hash('ripemd160', uniqid()), 0, 8);
+      //$filename = $this->context['view_id'] . '_' . date('Y_m_d_H_i', \Drupal::time()->getRequestTime()) . '-' . $rand . '.' . static::EXTENSION;
+
+      // this we need to change.
+      $filename = 'sasuke.xlsx';
+      $wrapper = 'public';
+
+      $destination = $wrapper . '://' . $filename;
+      $file = file_save_data($output, $destination, FileSystemInterface::EXISTS_REPLACE);
+      $file->setTemporary();
+      $file->save();
+      $file_url = Url::fromUri(file_create_url($file->getFileUri()));
+
+      $link = Link::fromTextAndUrl($this->t('Click here'), $file_url);
+      $this->messenger()->addStatus($this->t('Export file created, @link to download.', ['@link' => $link->toString()]));
+    }
   }
 
 }

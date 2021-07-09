@@ -16,6 +16,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use Drupal\file\Entity\File;
 
 /**
  * Implements a form to generate xlsx content.
@@ -154,10 +155,12 @@ class GenerateXLSXContentForm extends FormBase {
         array_splice($context['sandbox']['items'], 0, $limit);
       }
 
+      $context['sandbox']['zip_name'] = 'arhive1';
+
       foreach ($context['sandbox']['items'] as $item) {
         if ($counter != $limit) {
           $output = $this->vboExportContentXlsx($item);
-          $this->sendToFile($output);
+          $this->sendToFile($output, 'arhive1');
 
           $counter++;
           $context['sandbox']['progress']++;
@@ -342,26 +345,41 @@ class GenerateXLSXContentForm extends FormBase {
    * @param string $output
    *   The string that will be saved to a file.
    */
-  protected function sendToFile($output) {
+  protected function sendToFile($output, $zip_name) {
     if (!empty($output)) {
       $rand = substr(hash('ripemd160', uniqid()), 0, 8);
       //$filename = $this->context['view_id'] . '_' . date('Y_m_d_H_i', \Drupal::time()->getRequestTime()) . '-' . $rand . '.' . static::EXTENSION;
 
+      $uuid_service = \Drupal::service('uuid');
+      $uuid = $uuid_service->generate();
       // this we need to change.
-      $filename = 'sasuke.xlsx';
+      $filename = 'node_' . $uuid_service->generate() . '.xlsx';
       $wrapper = 'public';
 
       $destination = $wrapper . '://' . $filename;
       $file = file_save_data($output, $destination, FileSystemInterface::EXISTS_REPLACE);
       $file->setTemporary();
       $file->save();
-
       $file_system = \Drupal::service('file_system');
-      $zip_file_uri = \Drupal::service('file_system')->saveData('', '/var/www/docroot/web/sites/default/files/content.zip', FileSystemInterface::EXISTS_RENAME);
-      $zip = \Drupal::service('plugin.manager.archiver')->getInstance(['filepath' => $file_system->realpath($zip_file_uri)])->getArchive();
-      $zip->addFile($file_system->realpath($file->getFileUri()), $file->getFilename());
 
-      $link = Link::fromTextAndUrl($this->t('Click here'), Url::fromUri('internal:/sites/default/files/content.zip'));
+      if (!file_exists('/var/www/docroot/web/sites/default/files/' . $zip_name . '.zip')) {
+        $zip_file_uri = \Drupal::service('file_system')->saveData('', '/var/www/docroot/web/sites/default/files/' . $zip_name . '.zip', FileSystemInterface::EXISTS_RENAME);
+        $zip = \Drupal::service('plugin.manager.archiver')->getInstance(['filepath' => $file_system->realpath($zip_file_uri)])->getArchive();
+        $zip->addFile($file_system->realpath($file->getFileUri()), $file->getFilename());
+      }
+      else {
+        /** @var \Drupal\file\FileInterface $file */
+        $archive = File::load('/var/www/docroot/web/sites/default/files/' . $zip_name . '.zip');
+        $zip = \Drupal::service('plugin.manager.archiver')->getInstance(['filepath' => $file_system->realpath('/var/www/docroot/web/sites/default/files/' . $zip_name . '.zip')])->getArchive();
+        $zip->addFile($file_system->realpath($file->getFileUri()), $file->getFilename());
+      }
+
+
+//      $zip_file_uri = \Drupal::service('file_system')->saveData('', '/var/www/docroot/web/sites/default/files/' . $zip_name . '.zip', FileSystemInterface::EXISTS_RENAME);
+//      $zip = \Drupal::service('plugin.manager.archiver')->getInstance(['filepath' => $file_system->realpath($zip_file_uri)])->getArchive();
+//      $zip->addFile($file_system->realpath($file->getFileUri()), $file->getFilename());
+
+      $link = Link::fromTextAndUrl($this->t('Click here'), Url::fromUri('internal:/sites/default/files/' . $zip_name . '.zip'));
       $this->messenger()->addStatus($this->t('Export file created, @link to download.', ['@link' => $link->toString()]));
     }
   }

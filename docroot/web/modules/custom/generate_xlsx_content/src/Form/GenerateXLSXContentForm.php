@@ -361,23 +361,17 @@ class GenerateXLSXContentForm extends FormBase {
       $file->setTemporary();
       $file->save();
       $file_system = \Drupal::service('file_system');
+      $archiver_path = '/var/www/docroot/web/sites/default/files/' . $zip_name . '.zip';
 
-      if (!file_exists('/var/www/docroot/web/sites/default/files/' . $zip_name . '.zip')) {
-        $zip_file_uri = \Drupal::service('file_system')->saveData('', '/var/www/docroot/web/sites/default/files/' . $zip_name . '.zip', FileSystemInterface::EXISTS_RENAME);
+      if (!file_exists($archiver_path)) {
+        $zip_file_uri = \Drupal::service('file_system')->saveData('', $archiver_path, FileSystemInterface::EXISTS_RENAME);
         $zip = \Drupal::service('plugin.manager.archiver')->getInstance(['filepath' => $file_system->realpath($zip_file_uri)])->getArchive();
         $zip->addFile($file_system->realpath($file->getFileUri()), $file->getFilename());
       }
       else {
-        /** @var \Drupal\file\FileInterface $file */
-        $archive = File::load('/var/www/docroot/web/sites/default/files/' . $zip_name . '.zip');
-        $zip = \Drupal::service('plugin.manager.archiver')->getInstance(['filepath' => $file_system->realpath('/var/www/docroot/web/sites/default/files/' . $zip_name . '.zip')])->getArchive();
+        $zip = \Drupal::service('plugin.manager.archiver')->getInstance(['filepath' => $file_system->realpath($archiver_path)])->getArchive();
         $zip->addFile($file_system->realpath($file->getFileUri()), $file->getFilename());
       }
-
-
-//      $zip_file_uri = \Drupal::service('file_system')->saveData('', '/var/www/docroot/web/sites/default/files/' . $zip_name . '.zip', FileSystemInterface::EXISTS_RENAME);
-//      $zip = \Drupal::service('plugin.manager.archiver')->getInstance(['filepath' => $file_system->realpath($zip_file_uri)])->getArchive();
-//      $zip->addFile($file_system->realpath($file->getFileUri()), $file->getFilename());
 
       $link = Link::fromTextAndUrl($this->t('Click here'), Url::fromUri('internal:/sites/default/files/' . $zip_name . '.zip'));
       $this->messenger()->addStatus($this->t('Export file created, @link to download.', ['@link' => $link->toString()]));

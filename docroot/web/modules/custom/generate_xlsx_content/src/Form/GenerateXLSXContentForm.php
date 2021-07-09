@@ -360,9 +360,7 @@ class GenerateXLSXContentForm extends FormBase {
       $zip_file_uri = \Drupal::service('file_system')->saveData('', '/var/www/docroot/web/sites/default/files/content.zip', FileSystemInterface::EXISTS_RENAME);
       $zip = \Drupal::service('plugin.manager.archiver')->getInstance(['filepath' => $file_system->realpath($zip_file_uri)])->getArchive();
       $zip->addFile($file_system->realpath($file->getFileUri()), $file->getFilename());
-      $a = 1;
 
-      //http://july2021.docksal/sites/default/files/sasuke.xlsx
       $link = Link::fromTextAndUrl($this->t('Click here'), Url::fromUri('internal:/sites/default/files/content.zip'));
       $this->messenger()->addStatus($this->t('Export file created, @link to download.', ['@link' => $link->toString()]));
     }

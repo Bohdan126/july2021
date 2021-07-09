@@ -355,18 +355,11 @@ class GenerateXLSXContentForm extends FormBase {
       $file = file_save_data($output, $destination, FileSystemInterface::EXISTS_REPLACE);
       $file->setTemporary();
       $file->save();
-      $file_url = Url::fromUri(file_create_url($file->getFileUri()));
 
       $file_system = \Drupal::service('file_system');
-      $zip_file_uri = file_unmanaged_save_data('', '/var/www/docroot/web/sites/default/files/content.zip', FILE_EXISTS_RENAME);
-      $zip = archiver_get_archiver($file_system->realpath($zip_file_uri))->getArchive();
-
-      // The name of the file inside the ZIP archive. If specified,
-      // it will override filename.
-      $localname = $file->getFilename();
-      // $filename - path to the file to add.
-      $filename = $file_system->realpath($file->getFileUri());
-      $zip->addFile($filename, $localname);
+      $zip_file_uri = \Drupal::service('file_system')->saveData('', '/var/www/docroot/web/sites/default/files/content.zip', FileSystemInterface::EXISTS_RENAME);
+      $zip = \Drupal::service('plugin.manager.archiver')->getInstance(['filepath' => $file_system->realpath($zip_file_uri)])->getArchive();
+      $zip->addFile($file_system->realpath($file->getFileUri()), $file->getFilename());
       $a = 1;
 
       //http://july2021.docksal/sites/default/files/sasuke.xlsx

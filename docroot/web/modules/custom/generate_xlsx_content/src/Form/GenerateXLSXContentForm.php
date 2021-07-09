@@ -122,7 +122,7 @@ class GenerateXLSXContentForm extends FormBase {
 
         $this->batchBuilder->setFile(drupal_get_path('module', 'generate_xlsx_content') . '/src/Form/GenerateXLSXContentForm.php');
         $this->batchBuilder->addOperation([$this, 'processItems'], [$nids]);
-        $this->batchBuilder->setFinishCallback([$this, 'finished']);
+        //$this->batchBuilder->setFinishCallback([$this, 'finished']);
 
         batch_set($this->batchBuilder->toArray());
       }
@@ -180,28 +180,29 @@ class GenerateXLSXContentForm extends FormBase {
     }
   }
 
-  /**
-   * Process single item.
-   *
-   * @param int|string $item
-   *   An id of Node.
-   */
-  public function processItem($item) {
-    $node = $this->entityTypeManager->getStorage('node')->load($item);
-    $node->save();
-  }
+//  /**
+//   * Process single item.
+//   *
+//   * @param int|string $item
+//   *   An id of Node.
+//   */
+//  public function processItem($item) {
+//    $node = $this->entityTypeManager->getStorage('node')->load($item);
+//    $node->save();
+//  }
 
-  /**
-   * Finished callback for batch.
-   */
-  public function finished($success, $results, $operations) {
-    $message = $this->t('Number of nodes affected by batch: @count', [
-      '@count' => $results['processed'],
-    ]);
-
-    $this->messenger()
-      ->addStatus($message);
-  }
+//
+//  /**
+//   * Finished callback for batch.
+//   */
+//  public function finished($success, $results, $operations) {
+//    $message = $this->t('Number of nodes affected by batch: @count', [
+//      '@count' => $results['processed'],
+//    ]);
+//
+//    $this->messenger()
+//      ->addStatus($message);
+//  }
 
   /**
    * Xlsx content builder function.
@@ -250,8 +251,6 @@ class GenerateXLSXContentForm extends FormBase {
     foreach ($headers as $header) {
       $worksheet->setCellValueExplicitByColumnAndRow($col_index++, 1, trim($header), DataType::TYPE_STRING);
     }
-
-    $author = $node->getRevisionAuthor();
 
     $rows[] = [
       'node_id' => $node->id(),
@@ -358,7 +357,20 @@ class GenerateXLSXContentForm extends FormBase {
       $file->save();
       $file_url = Url::fromUri(file_create_url($file->getFileUri()));
 
-      $link = Link::fromTextAndUrl($this->t('Click here'), $file_url);
+      $file_system = \Drupal::service('file_system');
+      $zip_file_uri = file_unmanaged_save_data('', '/var/www/docroot/web/sites/default/files/content.zip', FILE_EXISTS_RENAME);
+      $zip = archiver_get_archiver($file_system->realpath($zip_file_uri))->getArchive();
+
+      // The name of the file inside the ZIP archive. If specified,
+      // it will override filename.
+      $localname = $file->getFilename();
+      // $filename - path to the file to add.
+      $filename = $file_system->realpath($file->getFileUri());
+      $zip->addFile($filename, $localname);
+      $a = 1;
+
+      //http://july2021.docksal/sites/default/files/sasuke.xlsx
+      $link = Link::fromTextAndUrl($this->t('Click here'), Url::fromUri('internal:/sites/default/files/content.zip'));
       $this->messenger()->addStatus($this->t('Export file created, @link to download.', ['@link' => $link->toString()]));
     }
   }

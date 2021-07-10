@@ -2,6 +2,7 @@
 
 namespace Drupal\generate_xlsx_content\Form;
 
+use Drupal\Core\Archiver\ArchiverManager;
 use Drupal\Core\Batch\BatchBuilder;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\File\FileSystemInterface;
@@ -37,11 +38,27 @@ class GenerateXLSXContentForm extends FormBase {
   protected $batchBuilder;
 
   /**
+   * The file system service.
+   *
+   * @var \Drupal\Core\File\FileSystemInterface
+   */
+  protected $fileSystem;
+
+  /**
+   * The archiver plugin manager service.
+   *
+   * @var \Drupal\Core\Archiver\ArchiverManager
+   */
+  protected $archiverManager;
+
+  /**
    * Create an instance of GenerateXLSXContentForm.
    */
-  public function __construct(EntityTypeManagerInterface $entityTypeManager) {
+  public function __construct(EntityTypeManagerInterface $entityTypeManager, FileSystemInterface $file_system, ArchiverManager $archiver_manager) {
     $this->entityTypeManager = $entityTypeManager;
     $this->batchBuilder = new BatchBuilder();
+    $this->fileSystem = $file_system;
+    $this->archiverManager = $archiver_manager;
   }
 
   /**
@@ -49,7 +66,9 @@ class GenerateXLSXContentForm extends FormBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('entity_type.manager')
+      $container->get('entity_type.manager'),
+      $container->get('file_system'),
+      $container->get('plugin.manager.archiver')
     );
   }
 
@@ -324,17 +343,16 @@ class GenerateXLSXContentForm extends FormBase {
       $file = file_save_data($output, $destination, FileSystemInterface::EXISTS_REPLACE);
       $file->setTemporary();
       $file->save();
-      $file_system = \Drupal::service('file_system');
       $archiver_path = '/var/www/docroot/web/sites/default/files/' . $zip_name;
 
       if (!file_exists($archiver_path)) {
-        $zip_file_uri = \Drupal::service('file_system')->saveData('', $archiver_path, FileSystemInterface::EXISTS_RENAME);
-        $zip = \Drupal::service('plugin.manager.archiver')->getInstance(['filepath' => $file_system->realpath($zip_file_uri)])->getArchive();
-        $zip->addFile($file_system->realpath($file->getFileUri()), $file->getFilename());
+        $zip_file_uri = $this->fileSystem->saveData('', $archiver_path, FileSystemInterface::EXISTS_RENAME);
+        $zip = $this->archiverManager->getInstance(['filepath' => $this->fileSystem->realpath($zip_file_uri)])->getArchive();
+        $zip->addFile($this->fileSystem->realpath($file->getFileUri()), $file->getFilename());
       }
       else {
-        $zip = \Drupal::service('plugin.manager.archiver')->getInstance(['filepath' => $file_system->realpath($archiver_path)])->getArchive();
-        $zip->addFile($file_system->realpath($file->getFileUri()), $file->getFilename());
+        $zip = $this->archiverManager->getInstance(['filepath' => $this->fileSystem->realpath($archiver_path)])->getArchive();
+        $zip->addFile($this->fileSystem->realpath($file->getFileUri()), $file->getFilename());
       }
 
       $link = Link::fromTextAndUrl($this->t('Click here'), Url::fromUri('internal:/sites/default/files/' . $zip_name));

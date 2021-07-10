@@ -16,7 +16,6 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
-use Drupal\file\Entity\File;
 
 /**
  * Implements a form to generate xlsx content.
@@ -155,12 +154,12 @@ class GenerateXLSXContentForm extends FormBase {
         array_splice($context['sandbox']['items'], 0, $limit);
       }
 
-      $context['sandbox']['zip_name'] = 'arhive1';
+      $zip_name = 'export_content_' . date('Y_m_d_H_i', \Drupal::time()->getRequestTime()) . '.zip';
 
       foreach ($context['sandbox']['items'] as $item) {
         if ($counter != $limit) {
           $output = $this->vboExportContentXlsx($item);
-          $this->sendToFile($output, 'arhive1');
+          $this->sendToFile($output, $zip_name, $item);
 
           $counter++;
           $context['sandbox']['progress']++;
@@ -183,38 +182,13 @@ class GenerateXLSXContentForm extends FormBase {
     }
   }
 
-//  /**
-//   * Process single item.
-//   *
-//   * @param int|string $item
-//   *   An id of Node.
-//   */
-//  public function processItem($item) {
-//    $node = $this->entityTypeManager->getStorage('node')->load($item);
-//    $node->save();
-//  }
-
-//
-//  /**
-//   * Finished callback for batch.
-//   */
-//  public function finished($success, $results, $operations) {
-//    $message = $this->t('Number of nodes affected by batch: @count', [
-//      '@count' => $results['processed'],
-//    ]);
-//
-//    $this->messenger()
-//      ->addStatus($message);
-//  }
-
   /**
    * Xlsx content builder function.
    */
   protected function vboExportContentXlsx($variables) {
-    $a = 1;
-
     //rename $variables.
     $node = $this->entityTypeManager->getStorage('node')->load($variables);
+    $current_user = \Drupal::currentUser();
     $headers = [
       'Node ID',
       'Link',
@@ -223,14 +197,10 @@ class GenerateXLSXContentForm extends FormBase {
       'Author',
       'Created at',
       'Status',
-      '[Field Name 1]',
-      '[Field Name 2]',
-      '[Field Name N]',
+      'Uuid',
+      'Author Id',
+      'Langcode',
     ];
-
-
-    $config = $variables['configuration'];
-    $current_user = \Drupal::currentUser();
 
     // Load PhpSpreadsheet library.
     if (!_vbo_export_library_exists(Spreadsheet::class)) {
@@ -255,33 +225,30 @@ class GenerateXLSXContentForm extends FormBase {
       $worksheet->setCellValueExplicitByColumnAndRow($col_index++, 1, trim($header), DataType::TYPE_STRING);
     }
 
+    $options = ['absolute' => TRUE];
+    $url = Url::fromRoute('entity.node.canonical', ['node' => $node->id()], $options);
+
     $rows[] = [
       'node_id' => $node->id(),
-      'link' => 'test',
-      'title' => $node->label(),
+      'link' => $url->toString(),
       'content_type' => $node->bundle(),
-      'author' => $node->getRevisionAuthor()->name->getString(),
-      'created_at' => $node->getCreatedTime(),
-      'status' => $node->get('status')->getString() ? 'published' : 'unpublished',
-      'field1' => 'test',
-      'field2' => 'test',
-      'field3' => 'test',
+      'title' => $node->label(),
+      'author' => $node->getOwner()->name->getString(),
+      'created_at' => date('d-m-Y H:i', $node->getCreatedTime()),
+      'status' => $node->isPublished() ? 'published' : 'unpublished',
+      'uuid' => $node->uuid(),
+      'author_id' => $node->getOwnerId(),
+      'langcode' => $node->get('langcode')->getString(),
     ];
     // Set rows.
     foreach ($rows as $row_index => $row) {
       $col_index = 1;
       foreach ($row as $cell) {
-        // Sanitize data.
-        if ($config['strip_tags']) {
-          $cell = strip_tags($cell);
-        }
-        // Rows start from 1 and we need to account for header.
         $worksheet->setCellValueExplicitByColumnAndRow($col_index++, $row_index + 2, trim($cell), DataType::TYPE_STRING);
       }
-      //unset($variables['rows'][$row_index]);
     }
 
-    // Add some additional styling to the worksheet.
+    // Add additional styling to the worksheet.
     $spreadsheet->getDefaultStyle()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
     $last_column = $worksheet->getHighestColumn();
     $last_column_index = Coordinate::columnIndexFromString($last_column);
@@ -306,7 +273,6 @@ class GenerateXLSXContentForm extends FormBase {
     }
 
     // Set a minimum and maximum width for columns.
-    // TODO: move this to module settings.
     $min_column_width = 15;
     $max_column_width = 85;
 
@@ -332,7 +298,6 @@ class GenerateXLSXContentForm extends FormBase {
     }
 
     $objWriter = new Xlsx($spreadsheet);
-    // Catch the output of the spreadsheet.
     ob_start();
     $objWriter->save('php://output');
     $excelOutput = ob_get_clean();
@@ -344,16 +309,15 @@ class GenerateXLSXContentForm extends FormBase {
    *
    * @param string $output
    *   The string that will be saved to a file.
+   * @param string $zip_name
+   *   File name for archive.
+   * @param int $item
+   *   Id of the node.
    */
-  protected function sendToFile($output, $zip_name) {
+  protected function sendToFile(string $output, string $zip_name, int $item) {
     if (!empty($output)) {
-      $rand = substr(hash('ripemd160', uniqid()), 0, 8);
-      //$filename = $this->context['view_id'] . '_' . date('Y_m_d_H_i', \Drupal::time()->getRequestTime()) . '-' . $rand . '.' . static::EXTENSION;
-
-      $uuid_service = \Drupal::service('uuid');
-      $uuid = $uuid_service->generate();
-      // this we need to change.
-      $filename = 'node_' . $uuid_service->generate() . '.xlsx';
+      $node = $this->entityTypeManager->getStorage('node')->load($item);
+      $filename = 'node_' . $node->uuid() . '.xlsx';
       $wrapper = 'public';
 
       $destination = $wrapper . '://' . $filename;
@@ -361,7 +325,7 @@ class GenerateXLSXContentForm extends FormBase {
       $file->setTemporary();
       $file->save();
       $file_system = \Drupal::service('file_system');
-      $archiver_path = '/var/www/docroot/web/sites/default/files/' . $zip_name . '.zip';
+      $archiver_path = '/var/www/docroot/web/sites/default/files/' . $zip_name;
 
       if (!file_exists($archiver_path)) {
         $zip_file_uri = \Drupal::service('file_system')->saveData('', $archiver_path, FileSystemInterface::EXISTS_RENAME);
@@ -373,7 +337,7 @@ class GenerateXLSXContentForm extends FormBase {
         $zip->addFile($file_system->realpath($file->getFileUri()), $file->getFilename());
       }
 
-      $link = Link::fromTextAndUrl($this->t('Click here'), Url::fromUri('internal:/sites/default/files/' . $zip_name . '.zip'));
+      $link = Link::fromTextAndUrl($this->t('Click here'), Url::fromUri('internal:/sites/default/files/' . $zip_name));
       $this->messenger()->addStatus($this->t('Export file created, @link to download.', ['@link' => $link->toString()]));
     }
   }

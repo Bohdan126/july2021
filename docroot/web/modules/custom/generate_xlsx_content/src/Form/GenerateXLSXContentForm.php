@@ -141,7 +141,6 @@ class GenerateXLSXContentForm extends FormBase {
 
         $this->batchBuilder->setFile(drupal_get_path('module', 'generate_xlsx_content') . '/src/Form/GenerateXLSXContentForm.php');
         $this->batchBuilder->addOperation([$this, 'processItems'], [$nids]);
-        //$this->batchBuilder->setFinishCallback([$this, 'finished']);
 
         batch_set($this->batchBuilder->toArray());
       }
@@ -202,11 +201,13 @@ class GenerateXLSXContentForm extends FormBase {
   }
 
   /**
-   * Xlsx content builder function.
+   * Xlsx content builder function..
+   *
+   * @param int $item
+   *   Id of the node.
    */
-  protected function vboExportContentXlsx($variables) {
-    //rename $variables.
-    $node = $this->entityTypeManager->getStorage('node')->load($variables);
+  protected function vboExportContentXlsx(int $item) {
+    $node = $this->entityTypeManager->getStorage('node')->load($item);
     $current_user = \Drupal::currentUser();
     $headers = [
       'Node ID',
@@ -259,6 +260,7 @@ class GenerateXLSXContentForm extends FormBase {
       'author_id' => $node->getOwnerId(),
       'langcode' => $node->get('langcode')->getString(),
     ];
+
     // Set rows.
     foreach ($rows as $row_index => $row) {
       $col_index = 1;
@@ -356,7 +358,7 @@ class GenerateXLSXContentForm extends FormBase {
       }
 
       $link = Link::fromTextAndUrl($this->t('Click here'), Url::fromUri('internal:/sites/default/files/' . $zip_name));
-      $this->messenger()->addStatus($this->t('Export file created, @link to download.', ['@link' => $link->toString()]));
+      $this->messenger()->addStatus($this->t('Content export file was created, @link to download.', ['@link' => $link->toString()]));
     }
   }
 

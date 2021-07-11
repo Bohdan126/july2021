@@ -151,23 +151,19 @@ class GenerateXLSXContentForm extends FormBase {
    * Processor for batch operations.
    */
   public function processItems($items, array &$context) {
-    // Elements per operation.
     $limit = 50;
 
-    // Set default progress values.
     if (empty($context['sandbox']['progress'])) {
       $context['sandbox']['progress'] = 0;
       $context['sandbox']['max'] = count($items);
     }
 
-    // Save items to array which will be changed during processing.
     if (empty($context['sandbox']['items'])) {
       $context['sandbox']['items'] = $items;
     }
 
     $counter = 0;
     if (!empty($context['sandbox']['items'])) {
-      // Remove already processed items.
       if ($context['sandbox']['progress'] != 0) {
         array_splice($context['sandbox']['items'], 0, $limit);
       }
@@ -186,15 +182,11 @@ class GenerateXLSXContentForm extends FormBase {
             ':progress' => $context['sandbox']['progress'],
             ':count' => $context['sandbox']['max'],
           ]);
-
-          // Increment total processed item values. Will be used in finished
-          // callback.
           $context['results']['processed'] = $context['sandbox']['progress'];
         }
       }
     }
 
-    // If not finished all tasks, we count percentage of process. 1 = 100%.
     if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
       $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
     }
@@ -207,6 +199,8 @@ class GenerateXLSXContentForm extends FormBase {
    *   Id of the node.
    */
   protected function vboExportContentXlsx(int $item) {
+
+    /** @var \Drupal\node\NodeInterface $node */
     $node = $this->entityTypeManager->getStorage('node')->load($item);
     $current_user = \Drupal::currentUser();
     $headers = [
@@ -228,7 +222,6 @@ class GenerateXLSXContentForm extends FormBase {
       return '';
     }
 
-    // Create PHPExcel spreadsheet and add rows to it.
     $spreadsheet = new Spreadsheet();
     $spreadsheet->removeSheetByIndex(0);
     $spreadsheet->getProperties()
@@ -239,7 +232,6 @@ class GenerateXLSXContentForm extends FormBase {
     $worksheet = $spreadsheet->createSheet();
     $worksheet->setTitle((string) t('Export'));
 
-    // Set header.
     $col_index = 1;
     foreach ($headers as $header) {
       $worksheet->setCellValueExplicitByColumnAndRow($col_index++, 1, trim($header), DataType::TYPE_STRING);
@@ -261,7 +253,6 @@ class GenerateXLSXContentForm extends FormBase {
       'langcode' => $node->get('langcode')->getString(),
     ];
 
-    // Set rows.
     foreach ($rows as $row_index => $row) {
       $col_index = 1;
       foreach ($row as $cell) {
@@ -269,21 +260,12 @@ class GenerateXLSXContentForm extends FormBase {
       }
     }
 
-    // Add additional styling to the worksheet.
     $spreadsheet->getDefaultStyle()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
     $last_column = $worksheet->getHighestColumn();
     $last_column_index = Coordinate::columnIndexFromString($last_column);
-
-    // Define the range of the first row.
     $first_row_range = 'A1:' . $last_column . '1';
-
-    // Set first row in bold.
     $worksheet->getStyle($first_row_range)->getFont()->setBold(TRUE);
-
-    // Activate an autofilter on the first row.
     $worksheet->setAutoFilter($first_row_range);
-
-    // Set wrap text and top vertical alignment for the entire worksheet.
     $full_range = 'A1:' . $last_column . $worksheet->getHighestRow();
     $worksheet->getStyle($full_range)->getAlignment()
       ->setWrapText(TRUE)
@@ -293,7 +275,6 @@ class GenerateXLSXContentForm extends FormBase {
       $worksheet->getColumnDimensionByColumn($column)->setAutoSize(TRUE);
     }
 
-    // Set a minimum and maximum width for columns.
     $min_column_width = 15;
     $max_column_width = 85;
 
@@ -337,6 +318,8 @@ class GenerateXLSXContentForm extends FormBase {
    */
   protected function sendToFile(string $output, string $zip_name, int $item) {
     if (!empty($output)) {
+
+      /** @var \Drupal\node\NodeInterface $node */
       $node = $this->entityTypeManager->getStorage('node')->load($item);
       $filename = 'node_' . $node->uuid() . '.xlsx';
       $wrapper = 'public';

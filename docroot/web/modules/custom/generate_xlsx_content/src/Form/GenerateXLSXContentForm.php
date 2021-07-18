@@ -199,7 +199,6 @@ class GenerateXLSXContentForm extends FormBase {
    *   Id of the node.
    */
   protected function vboExportContentXlsx(int $item) {
-
     /** @var \Drupal\node\NodeInterface $node */
     $node = $this->entityTypeManager->getStorage('node')->load($item);
     $current_user = \Drupal::currentUser();
@@ -285,15 +284,6 @@ class GenerateXLSXContentForm extends FormBase {
 
     $min_column_width = 15;
     $max_column_width = 85;
-
-    // Added a try-catch block
-    // due to https://github.com/PHPOffice/PHPExcel/issues/556.
-    try {
-      $worksheet->calculateColumnWidths();
-    }
-    catch (Exception $e) {
-
-    }
 
     for ($column = 0; $column <= $last_column_index; $column++) {
       $width = $worksheet->getColumnDimensionByColumn($column)->getWidth();

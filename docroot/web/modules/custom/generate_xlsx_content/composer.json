@@ -1,0 +1,9 @@
+{
+  "name": "drupal/generate_xlsx_content",
+  "description": "Generate XLSX Content.",
+  "type": "drupal-module",
+  "license": "GPL-2.0+",
+  "require": {
+    "phpoffice/phpspreadsheet": "^1.6"
+  }
+}

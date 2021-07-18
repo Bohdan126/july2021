@@ -256,7 +256,15 @@ class GenerateXLSXContentForm extends FormBase {
     foreach ($rows as $row_index => $row) {
       $col_index = 1;
       foreach ($row as $cell) {
-        $worksheet->setCellValueExplicitByColumnAndRow($col_index++, $row_index + 2, trim($cell), DataType::TYPE_STRING);
+        if (filter_var($cell, FILTER_VALIDATE_URL) == TRUE) {
+
+          // Make link field clickable in xlsx table.
+          $spreadsheet->getActiveSheet()->getCell('B' . $col_index)->getHyperlink()->setUrl($cell);
+          $worksheet->setCellValueExplicitByColumnAndRow($col_index++, $row_index + 2, trim($cell), DataType::TYPE_STRING);
+        }
+        else {
+          $worksheet->setCellValueExplicitByColumnAndRow($col_index++, $row_index + 2, trim($cell), DataType::TYPE_STRING);
+        }
       }
     }
 

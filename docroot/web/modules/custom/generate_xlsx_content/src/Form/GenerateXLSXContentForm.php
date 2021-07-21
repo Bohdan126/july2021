@@ -2,15 +2,18 @@
 
 namespace Drupal\generate_xlsx_content\Form;
 
+use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Archiver\ArchiverManager;
 use Drupal\Core\Batch\BatchBuilder;
+use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\File\FileSystemInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Link;
+use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\Url;
-use PhpOffice\PhpSpreadsheet\Calculation\Exception;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -52,13 +55,37 @@ class GenerateXLSXContentForm extends FormBase {
   protected $archiverManager;
 
   /**
+   * The date formatter service.
+   *
+   * @var \Drupal\Core\Datetime\DateFormatterInterface
+   */
+  protected $dateFormatter;
+
+  /**
+   * The current user.
+   *
+   * @var \Drupal\Core\Session\AccountInterface
+   */
+  protected $currentUser;
+
+  /**
+   * The time service.
+   *
+   * @var \Drupal\Component\Datetime\TimeInterface
+   */
+  protected $time;
+
+  /**
    * Create an instance of GenerateXLSXContentForm.
    */
-  public function __construct(EntityTypeManagerInterface $entityTypeManager, FileSystemInterface $file_system, ArchiverManager $archiver_manager) {
+  public function __construct(EntityTypeManagerInterface $entityTypeManager, FileSystemInterface $file_system, ArchiverManager $archiver_manager, DateFormatterInterface $date_formatter, AccountInterface $current_user, TimeInterface $time) {
     $this->entityTypeManager = $entityTypeManager;
     $this->batchBuilder = new BatchBuilder();
     $this->fileSystem = $file_system;
     $this->archiverManager = $archiver_manager;
+    $this->dateFormatter = $date_formatter;
+    $this->currentUser = $current_user;
+    $this->time = $time;
   }
 
   /**
@@ -68,7 +95,10 @@ class GenerateXLSXContentForm extends FormBase {
     return new static(
       $container->get('entity_type.manager'),
       $container->get('file_system'),
-      $container->get('plugin.manager.archiver')
+      $container->get('plugin.manager.archiver'),
+      $container->get('date.formatter'),
+      $container->get('current_user'),
+      $container->get('datetime.time')
     );
   }
 
@@ -168,7 +198,7 @@ class GenerateXLSXContentForm extends FormBase {
         array_splice($context['sandbox']['items'], 0, $limit);
       }
 
-      $zip_name = 'export_content_' . date('Y_m_d_H_i', \Drupal::time()->getRequestTime()) . '.zip';
+      $zip_name = 'export_content_' . $this->dateFormatter->format($this->time->getRequestTime(), 'custom', 'Y_m_d_H_i') . '.zip';
 
       foreach ($context['sandbox']['items'] as $item) {
         if ($counter != $limit) {
@@ -201,7 +231,6 @@ class GenerateXLSXContentForm extends FormBase {
   protected function vboExportContentXlsx(int $item) {
     /** @var \Drupal\node\NodeInterface $node */
     $node = $this->entityTypeManager->getStorage('node')->load($item);
-    $current_user = \Drupal::currentUser();
     $headers = [
       'Node ID',
       'Link',
@@ -217,17 +246,17 @@ class GenerateXLSXContentForm extends FormBase {
 
     // Load PhpSpreadsheet library.
     if (!_vbo_export_library_exists(Spreadsheet::class)) {
-      \Drupal::logger('vbo_export')->error('PhpSpreadsheet library not installed.');
+      $this->logger('vbo_export')->error('PhpSpreadsheet library not installed.');
       return '';
     }
 
     $spreadsheet = new Spreadsheet();
     $spreadsheet->removeSheetByIndex(0);
     $spreadsheet->getProperties()
-      ->setCreated(\Drupal::time()->getRequestTime())
-      ->setCreator($current_user->getDisplayName())
-      ->setTitle('VBO Export - ' . date('d-m-Y H:i', \Drupal::time()->getRequestTime()))
-      ->setLastModifiedBy($current_user->getDisplayName());
+      ->setCreated($this->time->getRequestTime())
+      ->setCreator($this->currentUser->getDisplayName())
+      ->setTitle('VBO Export - ' . $this->dateFormatter->format($this->time->getRequestTime(), 'custom', 'd-m-Y H:i'))
+      ->setLastModifiedBy($this->currentUser->getDisplayName());
     $worksheet = $spreadsheet->createSheet();
     $worksheet->setTitle((string) t('Export'));
 
@@ -245,7 +274,7 @@ class GenerateXLSXContentForm extends FormBase {
       'content_type' => $node->bundle(),
       'title' => $node->label(),
       'author' => $node->getOwner()->name->getString(),
-      'created_at' => date('d-m-Y H:i', $node->getCreatedTime()),
+      'created_at' => $this->dateFormatter->format($node->getCreatedTime(), 'custom', 'd-m-Y H:i'),
       'status' => $node->isPublished() ? 'published' : 'unpublished',
       'uuid' => $node->uuid(),
       'author_id' => $node->getOwnerId(),

@@ -249,6 +249,7 @@ class GenerateXLSXContentForm extends FormBase {
       return '';
     }
 
+    // Create PHPExcel spreadsheet and add rows to it.
     $spreadsheet = new Spreadsheet();
     $spreadsheet->removeSheetByIndex(0);
     $spreadsheet->getProperties()
@@ -259,6 +260,7 @@ class GenerateXLSXContentForm extends FormBase {
     $worksheet = $spreadsheet->createSheet();
     $worksheet->setTitle((string) t('Export'));
 
+    // Set header.
     $col_index = 1;
     foreach ($headers as $header) {
       $worksheet->setCellValueExplicitByColumnAndRow($col_index++, 1, trim($header), DataType::TYPE_STRING);
@@ -267,6 +269,7 @@ class GenerateXLSXContentForm extends FormBase {
     $options = ['absolute' => TRUE];
     $url = Url::fromRoute('entity.node.canonical', ['node' => $node->id()], $options);
 
+    // Array with rows.
     $rows[] = [
       'node_id' => $node->id(),
       'link' => $url->toString(),
@@ -280,6 +283,7 @@ class GenerateXLSXContentForm extends FormBase {
       'langcode' => $node->get('langcode')->getString(),
     ];
 
+    // Set rows.
     foreach ($rows as $row_index => $row) {
       $col_index = 1;
       foreach ($row as $cell) {
@@ -287,20 +291,31 @@ class GenerateXLSXContentForm extends FormBase {
 
           // Make link field clickable in xlsx table.
           $spreadsheet->getActiveSheet()->getCell('B' . $col_index)->getHyperlink()->setUrl($cell);
+          // Rows start from 1 and we need to account for header.
           $worksheet->setCellValueExplicitByColumnAndRow($col_index++, $row_index + 2, trim($cell), DataType::TYPE_STRING);
         }
         else {
+          // Rows start from 1 and we need to account for header.
           $worksheet->setCellValueExplicitByColumnAndRow($col_index++, $row_index + 2, trim($cell), DataType::TYPE_STRING);
         }
       }
     }
 
+    // Add some additional styling to the worksheet.
     $spreadsheet->getDefaultStyle()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
     $last_column = $worksheet->getHighestColumn();
     $last_column_index = Coordinate::columnIndexFromString($last_column);
+
+    // Define the range of the first row.
     $first_row_range = 'A1:' . $last_column . '1';
+
+    // Set first row in bold.
     $worksheet->getStyle($first_row_range)->getFont()->setBold(TRUE);
+
+    // Activate an autofilter on the first row.
     $worksheet->setAutoFilter($first_row_range);
+
+    // Set wrap text and top vertical alignment for the entire worksheet.
     $full_range = 'A1:' . $last_column . $worksheet->getHighestRow();
     $worksheet->getStyle($full_range)->getAlignment()
       ->setWrapText(TRUE)
@@ -310,6 +325,7 @@ class GenerateXLSXContentForm extends FormBase {
       $worksheet->getColumnDimensionByColumn($column)->setAutoSize(TRUE);
     }
 
+    // Set a minimum and maximum width for columns.
     $min_column_width = 15;
     $max_column_width = 85;
 
@@ -326,6 +342,8 @@ class GenerateXLSXContentForm extends FormBase {
     }
 
     $objWriter = new Xlsx($spreadsheet);
+
+    // Catch the output of the spreadsheet.
     ob_start();
     $objWriter->save('php://output');
     $excelOutput = ob_get_clean();
@@ -366,6 +384,8 @@ class GenerateXLSXContentForm extends FormBase {
         $zip->addFile($this->fileSystem->realpath($file->getFileUri()), $file->getFilename());
       }
       $file_scheme = \Drupal::config('system.file')->get('default_scheme');
+
+      // Generate link to download file with export results.
       $link = Link::fromTextAndUrl($this->t('Click here'), Url::fromUri(file_create_url($file_scheme . '://' . $zip_name)));
       $this->messenger()->addStatus($this->t('Content export file was created, @link to download.', ['@link' => $link->toString()]));
     }

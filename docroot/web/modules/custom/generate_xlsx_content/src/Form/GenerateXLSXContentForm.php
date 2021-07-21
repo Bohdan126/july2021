@@ -13,7 +13,6 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Link;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\Url;
-use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -355,7 +354,7 @@ class GenerateXLSXContentForm extends FormBase {
       $file = file_save_data($output, $destination, FileSystemInterface::EXISTS_REPLACE);
       $file->setTemporary();
       $file->save();
-      $archiver_path = '/var/www/docroot/web/sites/default/files/' . $zip_name;
+      $archiver_path = $this->fileSystem->realpath('public://' . $zip_name);
 
       if (!file_exists($archiver_path)) {
         $zip_file_uri = $this->fileSystem->saveData('', $archiver_path, FileSystemInterface::EXISTS_RENAME);
@@ -366,8 +365,8 @@ class GenerateXLSXContentForm extends FormBase {
         $zip = $this->archiverManager->getInstance(['filepath' => $this->fileSystem->realpath($archiver_path)])->getArchive();
         $zip->addFile($this->fileSystem->realpath($file->getFileUri()), $file->getFilename());
       }
-
-      $link = Link::fromTextAndUrl($this->t('Click here'), Url::fromUri('internal:/sites/default/files/' . $zip_name));
+      $file_scheme = \Drupal::config('system.file')->get('default_scheme');
+      $link = Link::fromTextAndUrl($this->t('Click here'), Url::fromUri(file_create_url($file_scheme . '://' . $zip_name)));
       $this->messenger()->addStatus($this->t('Content export file was created, @link to download.', ['@link' => $link->toString()]));
     }
   }
